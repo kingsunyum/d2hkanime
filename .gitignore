@@ -1,0 +1,22 @@
+# 日志
+*.log
+_web.log
+download.out.log
+webapp.log
+
+# 锁文件
+.download.lock
+
+# 临时下载目录（N_m3u8DL-RE 的临时分片目录）
+*/0__*__/
+*/1_*/
+*/2_*/
+*/*.m4s
+meta.json
+MUX.mkv
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.env

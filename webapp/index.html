@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>动画下载前端</title>
+<style>
+  :root{--bg:#0f1115;--card:#171a21;--line:#262b36;--fg:#e6e8ee;--mut:#8b93a7;
+        --acc:#4f8cff;--ok:#22c55e;--bad:#ef4444;--warn:#f59e0b}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--fg);font:14px/1.5 system-ui,-apple-system,"Noto Sans CJK SC",sans-serif}
+  header{padding:14px 20px;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:12px}
+  header h1{font-size:16px;margin:0;font-weight:600}
+  .dot{width:9px;height:9px;border-radius:50%;background:var(--mut)}
+  .dot.on{background:var(--ok);box-shadow:0 0 8px var(--ok)}
+  main{display:grid;grid-template-columns:minmax(340px,1fr) 1.4fr;gap:16px;padding:16px;max-width:1400px;margin:auto}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px}
+  .card h2{font-size:13px;margin:0 0 10px;color:var(--mut);font-weight:600;letter-spacing:.04em;text-transform:uppercase}
+  textarea{width:100%;height:230px;background:#0c0e12;color:var(--fg);border:1px solid var(--line);
+           border-radius:8px;padding:10px;font:12px/1.5 ui-monospace,Menlo,Consolas,monospace;resize:vertical}
+  input[type=text]{width:100%;background:#0c0e12;color:var(--fg);border:1px solid var(--line);
+                   border-radius:8px;padding:9px 10px;font:12px ui-monospace,monospace}
+  .row{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
+  button{border:1px solid var(--line);background:#20242e;color:var(--fg);padding:9px 14px;border-radius:8px;
+         cursor:pointer;font-size:13px}
+  button:hover{border-color:#3a4152}
+  button.primary{background:var(--acc);border-color:var(--acc);color:#fff}
+  button.danger{background:#3a1d1d;border-color:#5b2a2a;color:#ffb4b4}
+  button:disabled{opacity:.45;cursor:not-allowed}
+  .lbl{color:var(--mut);font-size:12px;margin:10px 0 4px}
+  .bar{height:10px;border-radius:6px;background:#0c0e12;border:1px solid var(--line);overflow:hidden}
+  .bar>i{display:block;height:100%;width:0;background:var(--acc);transition:width .3s}
+  .bar.ok>i{background:var(--ok)} .bar.warn>i{background:var(--warn)}
+  .kv{display:grid;grid-template-columns:auto 1fr;gap:4px 12px;font-size:13px}
+  .kv b{color:var(--mut);font-weight:500}
+  .stat{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:12px}
+  .stat div{background:#0c0e12;border:1px solid var(--line);border-radius:8px;padding:8px;text-align:center}
+  .stat span{display:block;font-size:20px;font-weight:600}
+  .stat small{color:var(--mut)}
+  table{width:100%;border-collapse:collapse;font-size:12px}
+  th,td{text-align:left;padding:5px 8px;border-bottom:1px solid var(--line)}
+  th{color:var(--mut);font-weight:500;position:sticky;top:0;background:var(--card)}
+  .badge{padding:1px 7px;border-radius:10px;font-size:11px}
+  .b-done{background:#12351f;color:#4ade80} .b-run{background:#12233d;color:#7db2ff}
+  .b-fail{background:#3a1d1d;color:#ff9c9c} .b-wait{background:#252a35;color:var(--mut)}
+  .scroll{max-height:300px;overflow:auto}
+  .files{max-height:230px;overflow:auto;font:12px ui-monospace,monospace}
+  .files div{display:grid;grid-template-columns:1fr 80px 150px 150px;gap:12px;padding:3px 0;border-bottom:1px solid #1d222c}
+  .files div>span:nth-child(n+2){text-align:right}
+  .files .hd{position:sticky;top:0;background:var(--card);color:var(--mut);font-weight:500}
+  .muted{color:var(--mut)}
+  @media(max-width:900px){main{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<header>
+  <div class="dot" id="dot"></div>
+  <h1>动画下载前端</h1>
+  <span class="muted" id="hdr">—</span>
+  <span class="muted" id="ntf"></span>
+</header>
+
+<main>
+  <!-- 左：输入 -->
+  <section class="card">
+    <h2>下载列表 (每行：<code>名称$m3u8链接</code> 或 仅链接)</h2>
+    <textarea id="urls" spellcheck="false" placeholder="我們這一家 - EP1 ...$https://.../master.m3u8
+https://.../另一个/master.m3u8"></textarea>
+    <div class="lbl">输出目录 <span class="muted" id="dirnote"></span></div>
+    <input type="text" id="outdir" value="/mnt/z4pro/video/儿童/我们这一家">
+    <div class="row">
+      <button onclick="loadFile()">载入 urls.txt</button>
+      <button onclick="saveUrls()">保存列表</button>
+    </div>
+    <div class="row">
+      <button class="primary" id="btnStart" onclick="startDl()">开始下载</button>
+      <button class="danger" onclick="stopDl()">停止</button>
+      <button id="btnAuto" onclick="toggleAuto()">⚡ 自动开始：—</button>
+      <button id="btnNotify" onclick="toggleNotify()">🔔 通知：—</button>
+      <button onclick="testNotify()">测试通知</button>
+    </div>
+    <div class="lbl" style="margin-top:14px">磁盘 / 挂载</div>
+    <div id="disk" class="kv"></div>
+  </section>
+
+  <!-- 右：进度 -->
+  <section class="card">
+    <h2>进度</h2>
+    <div class="stat">
+      <div><span id="s-total">0</span><small>总数</small></div>
+      <div><span id="s-done" style="color:var(--ok)">0</span><small>完成</small></div>
+      <div><span id="s-fail" style="color:var(--bad)">0</span><small>失败</small></div>
+      <div><span id="s-pend">0</span><small>待下</small></div>
+    </div>
+
+    <div class="lbl">总进度 <span id="ov-txt" class="muted"></span></div>
+    <div class="bar"><i id="ov"></i></div>
+
+    <div class="lbl">当前：<span id="cur-name" class="muted">—</span> <span id="cur-txt" class="muted"></span></div>
+    <div class="bar"><i id="cur"></i></div>
+
+    <div class="lbl" style="margin-top:14px">任务明细</div>
+    <div class="scroll">
+      <table><thead><tr><th>#</th><th>名称</th><th>状态</th><th>%</th></tr></thead>
+      <tbody id="items"></tbody></table>
+    </div>
+  </section>
+
+  <!-- 已下载文件 -->
+  <section class="card" style="grid-column:1/-1">
+    <h2>已下载文件 <span id="files-n" class="muted"></span></h2>
+    <div class="files" id="files"></div>
+  </section>
+</main>
+
+<script>
+const fmt = b => { if(!b && b!==0) return '-'; const u=['B','KB','MB','GB','TB']; let i=0;
+  while(b>=1024 && i<u.length-1){b/=1024;i++} return b.toFixed(i?1:0)+' '+u[i]; };
+const fmtTime = t => { if(!t) return '-'; const d=new Date(t*1000), p=n=>String(n).padStart(2,'0');
+  return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`; };
+let poll=null, notifyEnabled=true, notifyConfigured=false, autoStart=false;
+
+async function refresh(){
+  const outdir = document.getElementById('outdir').value || undefined;
+  const q = outdir ? ('?outdir='+encodeURIComponent(outdir)) : '';
+  let s;
+  try { s = await (await fetch('/api/state'+q)).json(); } catch(e){ return; }
+
+  document.getElementById('dot').className = 'dot' + (s.running?' on':'');
+  document.getElementById('hdr').textContent = s.running ? '下载中…' : (s.finished ? '已完成 ✓' : '空闲');
+
+  const $ = id => document.getElementById(id);
+  $('ntf').textContent = !s.notify_configured ? '· TG通知未配置'
+    : (s.notify_enabled ? '· TG通知已开启' : '· TG通知已关闭');
+  notifyEnabled = s.notify_enabled !== false; notifyConfigured = !!s.notify_configured;
+  const nb = document.getElementById('btnNotify');
+  nb.textContent = notifyEnabled ? '🔔 通知：开' : '🔕 通知：关';
+  nb.classList.toggle('danger', !notifyEnabled);
+
+  // 「自动开始」= anime-download 开机自启；WSL 重启后自动续下，不是点一下就立刻下载
+  autoStart = !!s.autostart;
+  const ab = document.getElementById('btnAuto');
+  ab.textContent = autoStart ? '⚡ 自动开始：开' : '⚡ 自动开始：关';
+  ab.classList.toggle('primary', autoStart);
+  ab.title = '开机自启 anime-download 服务：WSL/系统重启后自动批量下载（不影响当前是否正在下载）';
+  $('s-total').textContent=s.total; $('s-done').textContent=s.done;
+  $('s-fail').textContent=s.failed; $('s-pend').textContent=s.pending;
+  $('ov').style.width = s.overall_pct+'%';
+  $('ov-txt').textContent = s.overall_pct+'%  ('+(s.done+s.failed)+'/'+s.total+')'+(s.dead?('  · 死链跳过 '+s.dead):'');
+  $('cur-name').textContent = s.current || '—';
+  $('cur').style.width = (s.current_pct||0)+'%';
+  $('cur-txt').textContent = s.current? (s.current_pct+'%') : '';
+
+  $('btnStart').disabled = s.running;
+
+  // 明细
+  const tb = document.getElementById('items'); tb.innerHTML='';
+  s.items.slice(-300).forEach((it,i)=>{
+    const cls = {done:'b-done',running:'b-run',fail:'b-fail'}[it.status]||'b-wait';
+    const txt = {done:'完成',running:'下载中',fail:'失败'}[it.status]||'等待';
+    tb.insertAdjacentHTML('beforeend',
+      `<tr><td class="muted">${i+1}</td><td>${esc(it.name)}</td>
+       <td><span class="badge ${cls}">${txt}</span></td><td>${it.pct||0}%</td></tr>`);
+  });
+
+  // 磁盘
+  const d=s.disk;
+  document.getElementById('disk').innerHTML = d.ok
+    ? `<b>路径</b><span>${esc(d.path)}</span>
+       <b>挂载点</b><span>${esc(d.mount)} ${d.mounted?'<span class="badge b-done">已挂载</span>':'<span class="badge b-fail">未挂载</span>'}</span>
+       <b>容量</b><span>${fmt(d.used)} / ${fmt(d.total)}（${d.pct}% 已用，剩 ${fmt(d.free)}）</span>
+       <div style="grid-column:1/-1" class="bar warn"><i style="width:${d.pct}%"></i></div>`
+    : `<b>路径</b><span>${esc(d.path)}</span><span class="badge b-fail">不可用：${esc(d.error||'')}</span>`;
+
+  // 文件（按完成时间倒序）
+  const files = s.files.slice().sort((a,b)=>(b.mtime||0)-(a.mtime||0));
+  document.getElementById('files-n').textContent = '('+files.length+')';
+  const hd = '<div class="hd"><span>名称</span><span>大小</span><span>开始时间</span><span>完成时间</span></div>';
+  document.getElementById('files').innerHTML = hd + (files.length
+    ? files.map(f=>`<div><span>${esc(f.name)}</span><span class="muted">${fmt(f.size)}</span><span class="muted">${fmtTime(f.start)}</span><span class="muted">${fmtTime(f.end)}</span></div>`).join('')
+    : '<div><span class="muted">（无）</span><span></span><span></span><span></span></div>');
+}
+function esc(s){return (s||'').replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));}
+
+async function loadFile(){
+  const t = await (await fetch('/api/urls_text')).json().catch(()=>({text:''}));
+  document.getElementById('urls').value = t.text || '';
+}
+async function saveUrls(){
+  const text = document.getElementById('urls').value;
+  const r = await (await fetch('/api/urls',{method:'POST',headers:{'Content-Type':'application/json'},
+       body:JSON.stringify({text})})).json();
+  alert('已保存 '+r.count+' 条'+(r.dropped?('（去重 '+r.dropped+' 条）'):''));
+}
+async function startDl(){
+  await saveUrls();
+  const outdir = document.getElementById('outdir').value;
+  const r = await (await fetch('/api/start',{method:'POST',headers:{'Content-Type':'application/json'},
+       body:JSON.stringify({outdir})})).json();
+  if(!r.ok) alert('启动失败: '+(r.error||''));
+  refresh();
+}
+async function stopDl(){
+  await fetch('/api/stop',{method:'POST'});
+  refresh();
+}
+async function testNotify(){
+  const r = await (await fetch('/api/notify_test',{method:'POST'})).json().catch(e=>({ok:false,out:String(e)}));
+  alert(r.ok ? '✅ 通知已发送' : ('⚠️ 未发送:\n'+(r.out||'未知')));
+  refresh();
+}
+async function toggleNotify(){
+  const r = await (await fetch('/api/notify',{method:'POST',headers:{'Content-Type':'application/json'},
+       body:JSON.stringify({enabled:!notifyEnabled})})).json().catch(e=>({ok:false,error:String(e)}));
+  if(!r.ok) alert('切换失败: '+(r.error||''));
+  refresh();
+}
+async function toggleAuto(){
+  const r = await (await fetch('/api/autostart',{method:'POST',headers:{'Content-Type':'application/json'},
+       body:JSON.stringify({enabled:!autoStart})})).json().catch(e=>({ok:false,error:String(e)}));
+  if(!r.ok) alert('切换失败: '+(r.error||''));
+  refresh();
+}
+async function ensureOutdir(){
+  const inp = document.getElementById('outdir');
+  const outdir = (inp.value || '').trim();
+  const note = document.getElementById('dirnote');
+  if(!outdir){ note.textContent = ''; return; }
+  const r = await (await fetch('/api/mkdir',{method:'POST',headers:{'Content-Type':'application/json'},
+       body:JSON.stringify({outdir})})).json().catch(e=>({ok:false,error:String(e)}));
+  if(!r.ok){
+    note.textContent = '⚠️ 目录不可用：'+(r.error||outdir);
+    note.style.color = 'var(--bad)';
+  } else {
+    note.textContent = r.created ? '✓ 已自动创建' : '✓ 已存在';
+    note.style.color = 'var(--ok)';
+  }
+  refresh();
+}
+document.getElementById('outdir').addEventListener('change', ensureOutdir);
+document.getElementById('outdir').addEventListener('keydown', e=>{ if(e.key==='Enter') ensureOutdir(); });
+refresh(); poll=setInterval(refresh,1500);
+</script>
+</body>
+</html>
